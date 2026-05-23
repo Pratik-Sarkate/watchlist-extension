@@ -1762,7 +1762,7 @@
 
   // ─── Backend Configuration ────────────────────────────────────────────────────
   // Update this with your deployed backend URL
-  const BACKEND_BASE_URL = "https://your-backend-domain.com";
+  const BACKEND_BASE_URL = "https://watchlist-backend-w7ac.onrender.com";
   // const BACKEND_BASE_URL = "http://localhost:3000";
 
   // ─── MongoDB Sync with Custom Backend API ────────────────────────────────────
