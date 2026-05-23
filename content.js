@@ -1,18 +1,12 @@
-// Inject the interceptor script (non-blocking).
-// Even though it's async, we inject very early (document_start),
-// so it runs before most TradingView code.
+// content.js
 const _script = document.createElement("script");
 _script.src = chrome.runtime.getURL("injected.js");
-_script.async = false; // Execute in order, but don't block parsing
-_script.onload = () => {
-  console.log("[TV-WL] Interceptor script loaded");
-};
-_script.onerror = () => {
+_script.async = false;
+_script.onload = () => console.log("[TV-WL] Interceptor script loaded");
+_script.onerror = () =>
   console.error("[TV-WL] Failed to load interceptor script");
-};
 (document.head || document.documentElement).appendChild(_script);
 
-// Listen for messages from injected script
 window.addEventListener("message", async (event) => {
   if (event.source !== window) return;
 
@@ -24,6 +18,41 @@ window.addEventListener("message", async (event) => {
   if (event.data?.type === "TV_WL_SAVE_DATA") {
     await saveStorageData(event.data.payload);
     window.postMessage({ type: "TV_WL_SAVE_ACK" }, "*");
+  }
+
+  // ↓ Now routes through background service worker instead of content script fetch
+  if (event.data?.type === "TV_WL_FETCH") {
+    const { url, options, requestId } = event.data;
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: "TV_WL_BG_FETCH",
+        url,
+        options,
+      });
+
+      if (!result.ok) throw new Error(result.error);
+
+      window.postMessage(
+        {
+          type: "TV_WL_FETCH_RESPONSE",
+          requestId,
+          status: result.status,
+          statusText: result.statusText,
+          body: result.body,
+          headers: result.headers,
+        },
+        "*",
+      );
+    } catch (error) {
+      window.postMessage(
+        {
+          type: "TV_WL_FETCH_ERROR",
+          requestId,
+          error: error.message,
+        },
+        "*",
+      );
+    }
   }
 });
 

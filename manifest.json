@@ -6,8 +6,12 @@
   "permissions": ["storage"],
   "host_permissions": [
     "*://*.tradingview.com/*",
-    "*://scanner.tradingview.com/*"
+    "*://scanner.tradingview.com/*",
+    "http://localhost:3000/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["*://*.tradingview.com/*"],

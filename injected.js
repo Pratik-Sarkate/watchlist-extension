@@ -5,6 +5,7 @@
   const StorageBridge = {
     _resolvers: {},
     _counter: 0,
+    _fetchCounter: 0,
 
     init() {
       window.addEventListener("message", (e) => {
@@ -23,6 +24,25 @@
             resolve();
           }
         }
+        if (e.data?.type === "TV_WL_FETCH_RESPONSE") {
+          const resolver = this._resolvers["fetch_" + e.data.requestId];
+          if (resolver) {
+            delete this._resolvers["fetch_" + e.data.requestId];
+            const response = new Response(e.data.body, {
+              status: e.data.status,
+              statusText: e.data.statusText,
+              headers: e.data.headers,
+            });
+            resolver.resolve(response);
+          }
+        }
+        if (e.data?.type === "TV_WL_FETCH_ERROR") {
+          const resolver = this._resolvers["fetch_" + e.data.requestId];
+          if (resolver) {
+            delete this._resolvers["fetch_" + e.data.requestId];
+            resolver.reject(new Error(e.data.error));
+          }
+        }
       });
     },
 
@@ -37,6 +57,17 @@
       return new Promise((resolve) => {
         this._resolvers["save"] = resolve;
         window.postMessage({ type: "TV_WL_SAVE_DATA", payload: data }, "*");
+      });
+    },
+
+    async fetch(url, options) {
+      return new Promise((resolve, reject) => {
+        const requestId = this._fetchCounter++;
+        this._resolvers["fetch_" + requestId] = { resolve, reject };
+        window.postMessage(
+          { type: "TV_WL_FETCH", url, options, requestId },
+          "*",
+        );
       });
     },
   };
@@ -1732,6 +1763,7 @@
   // ─── Backend Configuration ────────────────────────────────────────────────────
   // Update this with your deployed backend URL
   const BACKEND_BASE_URL = "https://your-backend-domain.com";
+  // const BACKEND_BASE_URL = "http://localhost:3000";
 
   // ─── MongoDB Sync with Custom Backend API ────────────────────────────────────
   function showMongoDBModal() {
@@ -1825,11 +1857,14 @@
             statusEl.textContent = "Testing...";
 
             try {
-              const response = await fetch(`${BACKEND_BASE_URL}/healthCheck`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ connectionString: connStr }),
-              });
+              const response = await StorageBridge.fetch(
+                `${BACKEND_BASE_URL}/healthCheck`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ connectionString: connStr }),
+                },
+              );
               const result = await response.json();
               if (result.success) {
                 statusEl.textContent = "✅ Connection successful!";
@@ -1915,7 +1950,7 @@
               const collection = localStorage.getItem("tvwl-mongo-collection");
               const userId = localStorage.getItem("tvwl-mongo-user-id");
 
-              const response = await fetch(
+              const response = await StorageBridge.fetch(
                 `${BACKEND_BASE_URL}/saveWatchlists`,
                 {
                   method: "POST",
@@ -1966,7 +2001,7 @@
               const collection = localStorage.getItem("tvwl-mongo-collection");
               const userId = localStorage.getItem("tvwl-mongo-user-id");
 
-              const response = await fetch(
+              const response = await StorageBridge.fetch(
                 `${BACKEND_BASE_URL}/fetchWatchlists`,
                 {
                   method: "POST",
