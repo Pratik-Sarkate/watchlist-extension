@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "TradingView Unlimited Watchlist v2",
+  "version": "1.1.0",
+  "description": "Unlimited watchlists for TradingView with cloud backup via MongoDB",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "*://*.tradingview.com/*",
+    "*://scanner.tradingview.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.tradingview.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["*://*.tradingview.com/*"]
+    }
+  ],
+  "action": {
+    "default_title": "TradingView Unlimited Watchlist"
+  }
+}
