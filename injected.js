@@ -1765,273 +1765,256 @@
   const BACKEND_BASE_URL = "https://watchlist-backend-w7ac.onrender.com";
   // const BACKEND_BASE_URL = "http://localhost:3000";
 
-  // ─── MongoDB Sync with Custom Backend API ────────────────────────────────────
+  // ─── MongoDB Sync ─────────────────────────────────────────────────────────────
   function showMongoDBModal() {
     const overlay = showModal(
       `
       <h3>🔄 MongoDB Cloud Sync</h3>
-      <div id="tvwl-mongo-setup" style="display:block;">
-        <p style="font-size:12px;color:#787b86;margin-bottom:12px;">
-          Backup your watchlists to MongoDB via Cloud Functions.
-          <a href="https://mongodb.com/cloud/atlas" target="_blank" style="color:#2196f3;text-decoration:none;">Create MongoDB Atlas</a>
+
+      <!-- Setup: only userId needed -->
+      <div id="tvwl-mongo-setup">
+        <p style="font-size:12px;color:#787b86;margin:0 0 14px;">
+          Enter your User ID to sync watchlists with the cloud backend.
         </p>
-
-        <label style="font-size:12px;color:#787b86;display:block;margin-bottom:4px;">MongoDB Connection String</label>
-        <input id="tvwl-mongo-conn-str" type="password" placeholder="mongodb+srv://user:pass@cluster.mongodb.net/..." />
-
-        <label style="font-size:12px;color:#787b86;display:block;margin-bottom:4px;margin-top:8px;">Database Name</label>
-        <input id="tvwl-mongo-database" type="text" placeholder="e.g., tradingview" />
-
-        <label style="font-size:12px;color:#787b86;display:block;margin-bottom:4px;margin-top:8px;">Collection Name</label>
-        <input id="tvwl-mongo-collection" type="text" placeholder="e.g., watchlists" />
-
-        <label style="font-size:12px;color:#787b86;display:block;margin-bottom:4px;margin-top:8px;">User ID</label>
-        <input id="tvwl-mongo-user-id" type="text" placeholder="e.g., user@email.com" />
-
-        <div class="tvwl-modal-btns" style="margin-top:16px;">
-          <button class="tvwl-btn-secondary" id="tvwl-mongo-test-btn">Test Connection</button>
+        <label style="font-size:12px;color:#787b86;display:block;margin-bottom:4px;">User ID</label>
+        <input id="tvwl-mongo-user-id" type="text" placeholder="e.g. user@email.com" />
+        <div class="tvwl-modal-btns">
+          <button class="tvwl-btn-secondary" id="tvwl-mongo-cancel">Cancel</button>
           <button class="tvwl-btn-primary" id="tvwl-mongo-save-creds">Save & Continue</button>
         </div>
-
-        <div id="tvwl-mongo-status" style="font-size:11px;color:#787b86;margin-top:12px;display:none;"></div>
       </div>
 
-      <!-- Backup/Restore Section -->
+      <!-- Actions: health + backup/restore -->
       <div id="tvwl-mongo-actions" style="display:none;">
-        <div style="font-size:12px;color:#787b86;margin-bottom:12px;">
-          <strong>Database:</strong> <span id="tvwl-mongo-database-display"></span><br/>
-          <strong>Collection:</strong> <span id="tvwl-mongo-collection-display"></span><br/>
-          <strong>User ID:</strong> <span id="tvwl-mongo-user-id-display"></span>
-          <a href="#" id="tvwl-mongo-change-creds" style="color:#787b86;text-decoration:none;margin-left:8px;font-size:10px;display:block;margin-top:8px;">(change configuration)</a>
+        <!-- User ID row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="font-size:12px;color:#787b86;">
+            <span style="color:#d1d4dc;font-weight:600;" id="tvwl-mongo-uid-display"></span>
+          </div>
+          <a href="#" id="tvwl-mongo-change-creds"
+             style="font-size:11px;color:#787b86;text-decoration:none;">change</a>
         </div>
-        <div class="tvwl-modal-btns">
-          <button class="tvwl-btn-secondary" id="tvwl-mongo-restore">⬇ Restore</button>
-          <button class="tvwl-btn-primary" id="tvwl-mongo-backup">⬆ Backup Now</button>
+
+        <!-- Health check indicator -->
+        <div id="tvwl-health-row"
+             style="display:flex;align-items:center;gap:8px;padding:8px 12px;
+                    background:#131722;border-radius:8px;margin-bottom:14px;
+                    border:1px solid #2a2e39;">
+          <div id="tvwl-health-dot"
+               style="width:8px;height:8px;border-radius:50%;background:#787b86;
+                      flex-shrink:0;transition:background 0.3s;"></div>
+          <span id="tvwl-health-text"
+                style="font-size:11px;color:#787b86;flex:1;">Checking connection…</span>
+          <button id="tvwl-health-retry"
+                  style="background:none;border:none;color:#787b86;cursor:pointer;
+                         font-size:11px;padding:0;text-decoration:underline;">retry</button>
         </div>
+
+        <!-- Backup / Restore -->
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button class="tvwl-btn-secondary tvwl-footer-btn" id="tvwl-mongo-restore"
+                  style="flex:1;padding:9px 6px;font-size:12px;">⬇ Restore</button>
+          <button class="tvwl-btn-primary tvwl-footer-btn" id="tvwl-mongo-backup"
+                  style="flex:1;padding:9px 6px;font-size:12px;background:#2962ff;">⬆ Backup</button>
+        </div>
+
+        <!-- Last backup info -->
+        <div id="tvwl-last-backup"
+             style="font-size:10px;color:#4a4e5a;text-align:center;min-height:14px;"></div>
+
+        <!-- Status line -->
+        <div id="tvwl-mongo-status"
+             style="font-size:11px;color:#787b86;margin-top:10px;min-height:16px;
+                    text-align:center;"></div>
       </div>
     `,
       (overlay) => {
-        // Load saved configuration
-        const savedConnStr = localStorage.getItem("tvwl-mongo-conn-str");
-        const savedDatabase = localStorage.getItem("tvwl-mongo-database");
-        const savedCollection = localStorage.getItem("tvwl-mongo-collection");
-        const savedUserId = localStorage.getItem("tvwl-mongo-user-id");
+        const setupDiv = overlay.querySelector("#tvwl-mongo-setup");
+        const actionsDiv = overlay.querySelector("#tvwl-mongo-actions");
+        const statusEl = overlay.querySelector("#tvwl-mongo-status");
+        const healthDot = overlay.querySelector("#tvwl-health-dot");
+        const healthText = overlay.querySelector("#tvwl-health-text");
+        const lastBackup = overlay.querySelector("#tvwl-last-backup");
 
-        // If all configured, show actions section
-        if (savedConnStr && savedDatabase && savedCollection && savedUserId) {
-          overlay.querySelector("#tvwl-mongo-setup").style.display = "none";
-          overlay.querySelector("#tvwl-mongo-actions").style.display = "block";
-          overlay.querySelector("#tvwl-mongo-database-display").textContent =
-            savedDatabase;
-          overlay.querySelector("#tvwl-mongo-collection-display").textContent =
-            savedCollection;
-          overlay.querySelector("#tvwl-mongo-user-id-display").textContent =
-            savedUserId;
-        } else {
-          // Pre-fill if available
-          if (savedConnStr)
-            overlay.querySelector("#tvwl-mongo-conn-str").value = savedConnStr;
-          if (savedDatabase)
-            overlay.querySelector("#tvwl-mongo-database").value = savedDatabase;
-          if (savedCollection)
-            overlay.querySelector("#tvwl-mongo-collection").value =
-              savedCollection;
-          if (savedUserId)
-            overlay.querySelector("#tvwl-mongo-user-id").value = savedUserId;
+        // ── Helpers ──────────────────────────────────────────────────
+        function setStatus(msg, color = "#787b86") {
+          statusEl.textContent = msg;
+          statusEl.style.color = color;
+        }
+        function clearStatus() {
+          statusEl.textContent = "";
         }
 
-        // Test connection button
-        overlay
-          .querySelector("#tvwl-mongo-test-btn")
-          .addEventListener("click", async () => {
-            const connStr = overlay
-              .querySelector("#tvwl-mongo-conn-str")
-              .value.trim();
-            if (!connStr) {
-              showToast("Enter connection string first", "warn");
-              return;
+        function setHealth(state) {
+          // state: 'checking' | 'ok' | 'error'
+          const map = {
+            checking: { bg: "#ff9800", text: "Checking connection…" },
+            ok: { bg: "#26a69a", text: "Connected to MongoDB ✓" },
+            error: { bg: "#ef5350", text: "Cannot reach backend" },
+          };
+          healthDot.style.background = map[state].bg;
+          healthText.textContent = map[state].text;
+        }
+
+        async function runHealthCheck() {
+          setHealth("checking");
+          try {
+            const response = await StorageBridge.fetch(
+              `${BACKEND_BASE_URL}/healthCheck`,
+              { method: "GET" },
+            );
+            const result = await response.json();
+            if (result.success) {
+              setHealth("ok");
+            } else {
+              setHealth("error");
+              healthText.textContent = `Error: ${result.error}`;
             }
+          } catch (err) {
+            setHealth("error");
+            healthText.textContent = `Cannot reach backend: ${err.message}`;
+          }
+        }
 
-            const statusEl = overlay.querySelector("#tvwl-mongo-status");
-            statusEl.style.display = "block";
-            statusEl.textContent = "Testing...";
-
-            try {
-              const response = await StorageBridge.fetch(
-                `${BACKEND_BASE_URL}/healthCheck`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ connectionString: connStr }),
-                },
-              );
-              const result = await response.json();
-              if (result.success) {
-                statusEl.textContent = "✅ Connection successful!";
-                statusEl.style.color = "#26a69a";
-              } else {
-                statusEl.textContent = `❌ ${result.error}`;
-                statusEl.style.color = "#ef5350";
-              }
-            } catch (error) {
-              statusEl.textContent = `❌ ${error.message}`;
-              statusEl.style.color = "#ef5350";
+        async function loadLastBackupTime(userId) {
+          // We'll fetch metadata by doing a restore-peek (lightweight)
+          try {
+            const response = await StorageBridge.fetch(
+              `${BACKEND_BASE_URL}/fetchWatchlists`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId }),
+              },
+            );
+            const result = await response.json();
+            if (result.success && result.data?.updatedAt) {
+              const d = new Date(result.data.updatedAt);
+              lastBackup.textContent = `Last backup: ${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+            } else {
+              lastBackup.textContent = "No backup found in cloud";
             }
-          });
+          } catch {
+            lastBackup.textContent = "";
+          }
+        }
 
-        // Save configuration
+        function showActions(userId) {
+          setupDiv.style.display = "none";
+          actionsDiv.style.display = "block";
+          overlay.querySelector("#tvwl-mongo-uid-display").textContent = userId;
+          runHealthCheck();
+          loadLastBackupTime(userId);
+        }
+
+        // ── Init: check if already configured ────────────────────────
+        const savedUserId = localStorage.getItem("tvwl-mongo-user-id");
+        if (savedUserId) {
+          overlay.querySelector("#tvwl-mongo-user-id").value = savedUserId;
+          showActions(savedUserId);
+        }
+
+        // ── Save & Continue ───────────────────────────────────────────
         overlay
           .querySelector("#tvwl-mongo-save-creds")
           .addEventListener("click", () => {
-            const connStr = overlay
-              .querySelector("#tvwl-mongo-conn-str")
-              .value.trim();
-            const database = overlay
-              .querySelector("#tvwl-mongo-database")
-              .value.trim();
-            const collection = overlay
-              .querySelector("#tvwl-mongo-collection")
-              .value.trim();
             const userId = overlay
               .querySelector("#tvwl-mongo-user-id")
               .value.trim();
-
-            if (!connStr || !database || !collection || !userId) {
-              showToast("All fields are required", "warn");
+            if (!userId) {
+              showToast("Enter a User ID", "warn");
               return;
             }
-
-            localStorage.setItem("tvwl-mongo-conn-str", connStr);
-            localStorage.setItem("tvwl-mongo-database", database);
-            localStorage.setItem("tvwl-mongo-collection", collection);
             localStorage.setItem("tvwl-mongo-user-id", userId);
-
-            showToast("Configuration saved", "success");
-
-            overlay.querySelector("#tvwl-mongo-setup").style.display = "none";
-            overlay.querySelector("#tvwl-mongo-actions").style.display =
-              "block";
-            overlay.querySelector("#tvwl-mongo-database-display").textContent =
-              database;
-            overlay.querySelector(
-              "#tvwl-mongo-collection-display",
-            ).textContent = collection;
-            overlay.querySelector("#tvwl-mongo-user-id-display").textContent =
-              userId;
+            showActions(userId);
           });
 
-        // Change configuration
+        // ── Cancel ────────────────────────────────────────────────────
+        overlay
+          .querySelector("#tvwl-mongo-cancel")
+          .addEventListener("click", () => overlay.remove());
+
+        // ── Change credentials ────────────────────────────────────────
         overlay
           .querySelector("#tvwl-mongo-change-creds")
           .addEventListener("click", (e) => {
             e.preventDefault();
-            overlay.querySelector("#tvwl-mongo-setup").style.display = "block";
-            overlay.querySelector("#tvwl-mongo-actions").style.display = "none";
+            actionsDiv.style.display = "none";
+            setupDiv.style.display = "block";
+            const uid = localStorage.getItem("tvwl-mongo-user-id") || "";
+            overlay.querySelector("#tvwl-mongo-user-id").value = uid;
           });
 
-        // Backup
+        // ── Retry health check ────────────────────────────────────────
+        overlay
+          .querySelector("#tvwl-health-retry")
+          .addEventListener("click", runHealthCheck);
+
+        // ── Backup ────────────────────────────────────────────────────
         overlay
           .querySelector("#tvwl-mongo-backup")
           .addEventListener("click", async () => {
-            const statusEl =
-              overlay
-                .querySelector("#tvwl-mongo-actions")
-                .parentElement.querySelector("#tvwl-mongo-status") ||
-              document.createElement("div");
-            statusEl.style.cssText =
-              "font-size:11px;color:#787b86;margin-top:12px;";
-            statusEl.textContent = "Uploading...";
-            if (!statusEl.parentElement) overlay.appendChild(statusEl);
-
+            const userId = localStorage.getItem("tvwl-mongo-user-id");
+            if (!userId) {
+              showToast("No User ID configured", "error");
+              return;
+            }
+            setStatus("Uploading…");
             try {
               const data = await refreshData();
-              const connStr = localStorage.getItem("tvwl-mongo-conn-str");
-              const database = localStorage.getItem("tvwl-mongo-database");
-              const collection = localStorage.getItem("tvwl-mongo-collection");
-              const userId = localStorage.getItem("tvwl-mongo-user-id");
-
               const response = await StorageBridge.fetch(
                 `${BACKEND_BASE_URL}/saveWatchlists`,
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    connectionString: connStr,
-                    database: database,
-                    collection: collection,
-                    watchlists: data.watchlists,
-                    userId: userId,
-                  }),
+                  body: JSON.stringify({ watchlists: data.watchlists, userId }),
                 },
               );
-
               const result = await response.json();
-              if (result.success) {
-                statusEl.textContent = "✅ Backup complete!";
-                statusEl.style.color = "#26a69a";
-                setTimeout(() => statusEl.remove(), 3000);
-                showToast("Watchlists backed up successfully", "success");
-              } else {
-                throw new Error(result.error);
-              }
-            } catch (error) {
-              statusEl.textContent = `❌ ${error.message}`;
-              statusEl.style.color = "#ef5350";
-              console.error("[Backup Error]", error);
+              if (!result.success) throw new Error(result.error);
+              setStatus("✅ Backup complete!", "#26a69a");
+              lastBackup.textContent = `Last backup: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
+              showToast("Watchlists backed up successfully", "success");
+              setTimeout(clearStatus, 3000);
+            } catch (err) {
+              setStatus(`❌ ${err.message}`, "#ef5350");
+              console.error("[Backup Error]", err);
             }
           });
 
-        // Restore
+        // ── Restore ───────────────────────────────────────────────────
         overlay
           .querySelector("#tvwl-mongo-restore")
           .addEventListener("click", async () => {
-            const statusEl =
-              overlay
-                .querySelector("#tvwl-mongo-actions")
-                .parentElement.querySelector("#tvwl-mongo-status") ||
-              document.createElement("div");
-            statusEl.style.cssText =
-              "font-size:11px;color:#787b86;margin-top:12px;";
-            statusEl.textContent = "Downloading...";
-            if (!statusEl.parentElement) overlay.appendChild(statusEl);
-
+            const userId = localStorage.getItem("tvwl-mongo-user-id");
+            if (!userId) {
+              showToast("No User ID configured", "error");
+              return;
+            }
+            setStatus("Downloading…");
             try {
-              const connStr = localStorage.getItem("tvwl-mongo-conn-str");
-              const database = localStorage.getItem("tvwl-mongo-database");
-              const collection = localStorage.getItem("tvwl-mongo-collection");
-              const userId = localStorage.getItem("tvwl-mongo-user-id");
-
               const response = await StorageBridge.fetch(
                 `${BACKEND_BASE_URL}/fetchWatchlists`,
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    connectionString: connStr,
-                    database: database,
-                    collection: collection,
-                    userId: userId,
-                  }),
+                  body: JSON.stringify({ userId }),
                 },
               );
-
               const result = await response.json();
-              if (result.success && result.data && result.data.watchlists) {
-                await saveData({ watchlists: result.data.watchlists });
-                statusEl.textContent = "✅ Restore complete!";
-                statusEl.style.color = "#26a69a";
-                setTimeout(() => {
-                  overlay.remove();
-                  refreshPanel();
-                }, 1500);
-                showToast("Watchlists restored successfully", "success");
-              } else {
+              if (!result.success || !result.data?.watchlists) {
                 throw new Error(result.error || "No backup found");
               }
-            } catch (error) {
-              statusEl.textContent = `❌ ${error.message}`;
-              statusEl.style.color = "#ef5350";
-              console.error("[Restore Error]", error);
+              await saveData({ watchlists: result.data.watchlists });
+              setStatus("✅ Restore complete!", "#26a69a");
+              showToast("Watchlists restored successfully", "success");
+              setTimeout(() => {
+                overlay.remove();
+                refreshPanel();
+              }, 1500);
+            } catch (err) {
+              setStatus(`❌ ${err.message}`, "#ef5350");
+              console.error("[Restore Error]", err);
             }
           });
       },
